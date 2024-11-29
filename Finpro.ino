@@ -5,7 +5,7 @@
 
 #define mqtt_server "broker.hivemq.com"
 #define mqtt_port 8884
-const char mqttTopic[] = "IoT/FinalProject";
+#define mqttTopic[] = "IoT/FinalProject";
 
 #include <EEPROM.h>
 #include <WiFi.h>

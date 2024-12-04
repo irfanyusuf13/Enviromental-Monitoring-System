@@ -6,8 +6,8 @@
 
 // MQTT configuration
 #define mqtt_server "broker.hivemq.com"
-#define mqtt_port 8883
-#define mqtt_topic "env-monitor/output"
+#define mqtt_port 1883
+#define mqtt_topic "env-monitor\n"
 
 // Include necessary libraries
 #include <EEPROM.h>
@@ -19,7 +19,7 @@
 #include <PubSubClient.h>
 #include "freertos/semphr.h"
 #include "time.h"
-#include <DHT.h>  // Include DHT library
+#include <DHT.h>  
 #include <ESP32Servo.h>
 
 // DHT sensor setup
@@ -28,12 +28,10 @@
 
 DHT dht(DHT_PIN, DHT_TYPE);
 
-
+// Sensor Pin
 #define ledPin 2
-const int MQ135_PIN = 34;
-const int pinServo = 4;
-
-
+#define MQ135_PIN 34
+#define pinServo  4
 
 // Initialize LCD and mutex
 LiquidCrystal_I2C lcd(0x27, 20, 4);

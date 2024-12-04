@@ -1,12 +1,15 @@
-#define BLYNK_TEMPLATE_ID "TMPL6NnIARO7z"
-#define BLYNK_TEMPLATE_NAME "TP NO 5"
-#define BLYNK_AUTH_TOKEN "-LYV7MHePowiYXDc-wAGfV7EiEf5hJ9R"
+// Define Blynk template ID, name, and auth token
+#define BLYNK_TEMPLATE_ID "TMPL62d80911l"
+#define BLYNK_TEMPLATE_NAME "Finpro"
+#define BLYNK_AUTH_TOKEN "gU2c7jLT3jR49avcPaK64yCGOw8_taNK"
 #define BLYNK_PRINT Serial
 
+// MQTT configuration
 #define mqtt_server "broker.hivemq.com"
-#define mqtt_port 8884
-#define mqttTopic[] = "IoT/FinalProject";
+#define mqtt_port 8883
+#define mqtt_topic "env-monitor/output"
 
+// Include necessary libraries
 #include <EEPROM.h>
 #include <WiFi.h>
 #include <WiFiClient.h>
@@ -16,93 +19,299 @@
 #include <PubSubClient.h>
 #include "freertos/semphr.h"
 #include "time.h"
+#include <DHT.h>  // Include DHT library
+#include <ESP32Servo.h>
 
-LiquidCrystal_I2C lcd(0x27, 16, 2);
-SemaphoreHandle_t xSemaphore;
+// DHT sensor setup
+#define DHT_PIN 15          
+#define DHT_TYPE DHT11      
 
-char ssid[] = " ";
-char pass[] = " ";
+DHT dht(DHT_PIN, DHT_TYPE);
 
-const long gmtOffset_sec = 25200;
-const int daylightOffset_sec = 0;
-const char *ntpServer = "pool.ntp.org";
 
-float aqi = 0;
-float temperature = 0;
+#define ledPin 2
+const int MQ135_PIN = 34;
+const int pinServo = 4;
 
-const int addrAQI = 0
-const int addrTemp = 4;
+
+
+// Initialize LCD and mutex
+LiquidCrystal_I2C lcd(0x27, 20, 4);
+SemaphoreHandle_t xMutex;
+
+// WiFi credentials
+const char ssid[] = "Kazoku_EXT";
+const char password[] = "nept2908";
+uint32_t lastPublish = 0;
+
+// NTP server configuration
+const long  gmtOffset_sec = 25200;
+const int   daylightOffset_sec = 0;
+const char* ntpServer = "asia.pool.ntp.org";
+
+// Environmental variables
+float gasLevel = 0.0; // Example initial gasLevel
+float temperature = 0.0; // Initial temperature in °C
+float humidity = 0.0; // Initial humidity in %
+
+// EEPROM addresses
+const int addrGas = 0;
+const int addrTemperature = 4;
+const int addrHumidity = 8;
+
+// Blynk timer
 BlynkTimer timer;
 
 
+Servo myservo;
 
+// WiFi and MQTT clients
+WiFiClient wifiClient;
+PubSubClient mqttClient(wifiClient);
+bool isReconnecting = false;
 
-void setup () {
-    serial.begin(115200);
+void sendEnvDataToBlynk();
+void readEnvDataFromEEPROM();
+void saveEnvDataToEEPROM();
 
-    Blnyk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
-    mqttClient.setServer(mqtt_server, mqtt_port);
-    mqttClient.setCallback(callback);
+void setup()
+{
+  // Start serial communication
+  Serial.begin(115200);
 
-    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+  // Initialize Blynk
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, password);
 
-    xSemaphore = xSemaphoreCreateMutex();
+  // Set up MQTT server and callback
+  mqttClient.setServer(mqtt_server, mqtt_port);
+  mqttClient.setCallback(callback);
 
-    lcd.init();
-    lcd.backlight();
+  // Initialize time synchronization
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
 
-    EEPROM.begin(512);
+  // Create mutex
+  xMutex = xSemaphoreCreateMutex();
 
+  myservo.attach(pinServo); 
+  myservo.write(0); 
+
+  // Initialize LCD
+  lcd.init();
+  lcd.backlight();
+
+  // Initialize EEPROM
+  EEPROM.begin(32);
+
+  // Initialize DHT sensor
+  dht.begin();
+
+  // Read environmental data from EEPROM
+  readEnvDataFromEEPROM();
+
+  // Set up Blynk timer interval
+  timer.setInterval(5000L, sendEnvDataToBlynk);
+
+  // Delay for stability
+  delay(1000);
+
+  // Set up LED pin
+  pinMode(ledPin, OUTPUT);
+
+   // Initialize MQ135 sensor pin
+  pinMode(MQ135_PIN, INPUT);
 }
 
-void loop() {
-    blnyk.run();
-    timer.run();
+void loop()
+{
+  // Run Blynk and timer
+  Blynk.run();
+  timer.run();
 
-    if (!mqttClient.connected () && !isReconnecting) {
-        isRecconnecting = true;
-        reconnectMqtt();
-    }
+  // Create and run MQTT task on a separate core
+  xTaskCreatePinnedToCore(
+    mqttTask,           // Function to execute
+    "MQTT_Task",        // Task name
+    8192,               // Stack size
+    NULL,               // Parameters to pass to the function
+    1,                  // Priority
+    NULL,               // Task handle
+    1                   // Run on the second core
+  );
 
-    mqttClient.loop();
+  // Reconnect to MQTT if necessary
+  if (!mqttClient.connected() && !isReconnecting) {
+    isReconnecting = true;
+    reconnect();
+  }
+  
+  mqttClient.loop();
+
+  // Publish message to MQTT Topic every 50 seconds
+  if (millis() - lastPublish >= 50000 && mqttClient.connected()) {
+    lastPublish = millis();
+    mqttClient.publish(mqtt_topic, "Environment monitored.");
+    printLocalTime();
+    Serial.println("\tPublished message to MQTT Topic");
+  }
 }
 
-
-void printLocalTime() {
-    struct tm timeinfo;
-    if (!getLocalTime(&timeinfo)) {
-        Serial.println("Failed to obtain time");
-        return;
-    }
-    Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
+// Print local time
+void printLocalTime()
+{
+  struct tm timeinfo;
+  if(!getLocalTime(&timeinfo)){
+    Serial.println("Failed to obtain time");
+    return;
+  }
+  Serial.print(&timeinfo, "%H:%M:%S");
 }
 
+// MQTT task
 void mqttTask(void *pvParameters) {
-    while (true) {
-        if (!mqttClient.connected()) {
-            reconnectMqtt();
-        }
-        mqttClient.loop();
+  (void)pvParameters;
+
+  while (true) {
+    // Handle MQTT events
+    if (!mqttClient.connected() && !isReconnecting) {
+      isReconnecting = true;
+      reconnect();
     }
+    mqttClient.loop();
+    
+    // Sleep for a short duration to allow other tasks to run
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+  }
 }
 
-void sendDatatoBlnyk() {
+// Send environmental data to Blynk
+void sendEnvDataToBlynk()
+{
+  if(xSemaphoreTake(xMutex, portMAX_DELAY)) {
+    printLocalTime();
+    Serial.println("\tMutex taken");
 
+    // Read data from DHT22 sensor
+    temperature = dht.readTemperature();
+    humidity = dht.readHumidity();
+
+    gasLevel = analogRead(MQ135_PIN);
+    gasLevel = map(gasLevel, 0, 4095, 0, 500); 
+
+    // Check if the sensor readings are valid
+    if (isnan(temperature) || isnan(humidity)) {
+      Serial.println("Failed to read from DHT sensor!");
+      return;
+    }
+
+    // Clamp AQI and temperature to valid ranges
+    gasLevel = max(0.0f, min(gasLevel, 100.0f));  // Same for temperature
+    temperature = max(-10.0f, min(temperature, 50.0f));  // Same for temperature
+    humidity = max(0.0f, min(humidity, 100.0f));  // Clamp humidity
+
+    printLocalTime();
+    Serial.printf("\tGas: %.2f\tTemperature: %.2f°C\tHumidity: %.2f%%\n", gasLevel, temperature, humidity);
+
+    saveEnvDataToEEPROM();
+
+    // Write to Blynk
+    Blynk.virtualWrite(V0, gasLevel);
+    Blynk.virtualWrite(V1, temperature);
+    Blynk.virtualWrite(V2, humidity);
+
+    // Write to LCD Display
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Gas: ");
+    lcd.print(gasLevel, 2);
+    lcd.print(" ppm");
+
+    lcd.setCursor(0, 1);
+    lcd.print("Temp: ");
+    lcd.print(temperature, 2);
+    lcd.print(" C");
+
+    lcd.setCursor(0, 2);
+    lcd.print("Humidity: ");
+    lcd.print(humidity, 2);
+    lcd.print(" %");
+
+
+    // Write and Alert with LED BUILTIN
+
+    if (temperature > 40) {
+      digitalWrite(ledPin, HIGH);  // Turn on LED if temperature > 40°C
+      printLocalTime();
+      Serial.println("\tALERT! Temperature is too HIGH!");
+    } else {
+      digitalWrite(ledPin, LOW);  // Turn off LED if temperature <= 40°C
+      printLocalTime();
+      Serial.println("\tTemperature is within normal range.");
+    }
+
+    if (gasLevel > 5) {
+    myservo.write(90); // Gerakkan servo ke 90 derajat
+    printLocalTime();
+    Serial.println("\tALERT! AIR QUALITY IS POOR - Servo activated");
+    } else {
+        myservo.write(0); // Kembali ke posisi awal
+        printLocalTime();
+        Serial.println("\tAir quality is GOOD - Servo deactivated");
+    }
+
+    
+
+    xSemaphoreGive(xMutex);
+    printLocalTime();
+    Serial.println("\tMutex given");
+    Serial.println("---------------------------------");
+  }
 }
 
-void readDataFromEEPROM() {
-
+// Read environmental data from EEPROM
+void readEnvDataFromEEPROM()
+{
+  EEPROM.get(addrGas, gasLevel);
+  EEPROM.get(addrTemperature, temperature);
+  EEPROM.get(addrHumidity, humidity);
 }
 
-void saveDataToEEPROM() {
-
+// Save environmental data to EEPROM
+void saveEnvDataToEEPROM()
+{
+  EEPROM.put(addrGas, gasLevel);
+  EEPROM.put(addrTemperature, temperature);
+  EEPROM.put(addrHumidity, humidity);
+  EEPROM.commit();
 }
 
-void callback(char *topic, byte *payload, unsigned int length) {
+// MQTT callback function
+void callback(char* topic, byte* payload, unsigned int length) {
+  Serial.print("Message arrived on topic: ");
+  Serial.print(topic);
+  Serial.print(". Message: ");
+  String messageTemp;
 
+  for (int i = 0; i < length; i++) {
+    Serial.print((char)payload[i]);
+    messageTemp += (char)payload[i];
+  }
+  Serial.println();
 }
 
-
-void reconnectMqtt() {
-
+// Reconnect to MQTT
+void reconnect() {
+  if (!mqttClient.connected()) {
+    Serial.println("Attempting MQTT connection...");
+    if (mqttClient.connect("ESP32Client - Env")) {
+      Serial.println("MQTT Connected!");
+      mqttClient.subscribe(mqtt_topic);
+      Serial.println("Subscribed to MQTT Topic");
+      isReconnecting = false;
+    } else {
+      Serial.print("Failed, rc=");
+      Serial.print(mqttClient.state());
+      Serial.println(" Retrying in 5 seconds...");
+      delay(5000);
+    }
+  }
 }

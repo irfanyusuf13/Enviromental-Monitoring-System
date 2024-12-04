@@ -7,7 +7,7 @@
 // MQTT configuration
 #define mqtt_server "broker.hivemq.com"
 #define mqtt_port 1883
-#define mqtt_topic "env-monitor\n"
+#define mqtt_topic "env-monitor/output"
 
 // Include necessary libraries
 #include <EEPROM.h>
@@ -32,6 +32,8 @@ DHT dht(DHT_PIN, DHT_TYPE);
 #define ledPin 2
 #define MQ135_PIN 34
 #define pinServo  4
+
+
 
 // Initialize LCD and mutex
 LiquidCrystal_I2C lcd(0x27, 20, 4);
@@ -90,9 +92,7 @@ void setup()
   // Create mutex
   xMutex = xSemaphoreCreateMutex();
 
-  myservo.attach(pinServo); 
-  myservo.write(0); 
-
+  
   // Initialize LCD
   lcd.init();
   lcd.backlight();
@@ -117,6 +117,9 @@ void setup()
 
    // Initialize MQ135 sensor pin
   pinMode(MQ135_PIN, INPUT);
+
+  // Initialize Servo
+  myservo.attach(pinServo); 
 }
 
 void loop()
@@ -237,23 +240,30 @@ void sendEnvDataToBlynk()
     // Write and Alert with LED BUILTIN
 
     if (temperature > 40) {
+      Blynk.logEvent("temperature_alert", "Overheat Detected");
       digitalWrite(ledPin, HIGH);  // Turn on LED if temperature > 40°C
       printLocalTime();
       Serial.println("\tALERT! Temperature is too HIGH!");
-    } else {
+    } 
+    else {
       digitalWrite(ledPin, LOW);  // Turn off LED if temperature <= 40°C
       printLocalTime();
       Serial.println("\tTemperature is within normal range.");
     }
 
-    if (gasLevel > 5) {
-    myservo.write(90); // Gerakkan servo ke 90 derajat
-    printLocalTime();
-    Serial.println("\tALERT! AIR QUALITY IS POOR - Servo activated");
-    } else {
-        myservo.write(0); // Kembali ke posisi awal
-        printLocalTime();
-        Serial.println("\tAir quality is GOOD - Servo deactivated");
+    if (gasLevel > 50) {
+      Blynk.logEvent("gas_alert", "Gas Leakage Detected");
+      myservo.write(90); 
+      printLocalTime();
+      Serial.println("\tALERT! AIR QUALITY IS POOR - Servo activated");
+      delay(500); // Tunda untuk melihat gerakan
+      myservo.write(0);
+      delay(500); // Ulangi
+    } 
+    else {
+      myservo.write(0); // Kembali ke posisi awal
+      printLocalTime();
+      Serial.println("\tAir quality is GOOD - Servo deactivated");
     }
 
     

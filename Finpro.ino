@@ -29,11 +29,9 @@
 DHT dht(DHT_PIN, DHT_TYPE);
 
 // Sensor Pin
-#define ledPin 2
+#define ledPin 5
 #define MQ135_PIN 34
 #define pinServo  4
-
-
 
 // Initialize LCD and mutex
 LiquidCrystal_I2C lcd(0x27, 20, 4);
@@ -236,26 +234,26 @@ void sendEnvDataToBlynk()
     lcd.print(humidity, 2);
     lcd.print(" %");
 
-
+    
     // Write and Alert with LED BUILTIN
 
-    if (temperature > 40) {
-      Blynk.logEvent("temperature_alert", "Overheat Detected");
+    if (gasLevel > 5) {
+      Blynk.logEvent("gas_alert", "Gas Leakage Detected");
       digitalWrite(ledPin, HIGH);  // Turn on LED if temperature > 40°C
       printLocalTime();
-      Serial.println("\tALERT! Temperature is too HIGH!");
+      Serial.println("\tALERT! AIR QUALITY IS POOR - Servo activated");
     } 
     else {
       digitalWrite(ledPin, LOW);  // Turn off LED if temperature <= 40°C
       printLocalTime();
-      Serial.println("\tTemperature is within normal range.");
+      Serial.println("\tAir quality is GOOD - Servo deactivated");
     }
 
-    if (gasLevel > 50) {
-      Blynk.logEvent("gas_alert", "Gas Leakage Detected");
+    if (temperature > 40) {
+      Blynk.logEvent("temperature_alert", "Overheat Detected");
       myservo.write(90); 
       printLocalTime();
-      Serial.println("\tALERT! AIR QUALITY IS POOR - Servo activated");
+      Serial.println("\tALERT! Temperature is too HIGH!");
       delay(500); // Tunda untuk melihat gerakan
       myservo.write(0);
       delay(500); // Ulangi
@@ -263,7 +261,7 @@ void sendEnvDataToBlynk()
     else {
       myservo.write(0); // Kembali ke posisi awal
       printLocalTime();
-      Serial.println("\tAir quality is GOOD - Servo deactivated");
+      Serial.println("\tTemperature is within normal range.");
     }
 
     

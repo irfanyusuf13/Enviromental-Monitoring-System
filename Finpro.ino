@@ -237,7 +237,7 @@ void sendEnvDataToBlynk()
     
     // Write and Alert with LED BUILTIN
 
-    if (gasLevel > 5) {
+    if (gasLevel > 50) {
       Blynk.logEvent("gas_alert", "Gas Leakage Detected");
       digitalWrite(ledPin, HIGH);  // Turn on LED if temperature > 40°C
       printLocalTime();

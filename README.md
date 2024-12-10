@@ -9,15 +9,48 @@ Kondisi lingkungan yang buruk, seperti kualitas udara dan suhu ekstrem, dapat me
 ## Hardware design and implementation details
 
 Desain hardware kami mencakup ESP32, sensor suhu dan kelembapan DHT11, sensor gas MQ135, sensor indeks kualitas udara (AQI), layar LCD, motor servo, indikator LED, dan kabel jumper. Koneksi antar komponen menggunakan berbagai protokol komunikasi untuk integrasi yang efisien. Berikut adalah perangkat yang kami gunakan dalam proyek ini:
+
 - ESP32
+![picture 0](https://i.imgur.com/xJ4aq6v.png)  
+
+
+
 - Sensor DHT11
+![picture 1](https://i.imgur.com/azbwrfJ.png)  
+
+
+
 - Sensor MQ135 
+![picture 2](https://i.imgur.com/v2TjDRQ.png)  
+
+
+
 - LCD Display (I2C)
+![picture 3](https://i.imgur.com/vgo93RD.png)  
+
+
 - Motor Servo
+![picture 4](https://i.imgur.com/kctNlfE.png)  
+
+
+
 - LED Indicators
+![picture 5](https://i.imgur.com/Xb8NEcS.png)  
+
+
+
 - Jumper Cables
+![picture 7](https://i.imgur.com/CT9NbIF.png)  
+
+
 - Protoboard
+![picture 8](https://i.imgur.com/e9lBlX7.png)  
+
+
 - USB Power Supply
+![picture 9](https://i.imgur.com/I9qOpdy.png)  
+
+
 
 Sensor DHT11 terhubung ke ESP32 untuk transmisi data, sementara sensor MQ135 dan AQI yang bersifat analog terhubung ke pin ADC di ESP32 untuk pemantauan kualitas udara. Kedua sensor ini mengukur tingkat polutan dan berkontribusi dalam perhitungan Air Quality Index (AQI). Layar LCD menggunakan antarmuka komunikasi I2C, dengan pin SDA dan SCL terhubung ke GPIO pinout pada ESP32 yang bertugas mengontrol atau membaca status pin tertentu yang menangani sinyal digital masuk dan keluar.
 

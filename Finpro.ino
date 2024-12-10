@@ -1,15 +1,14 @@
-// Define Blynk template ID, name, and auth token
+// Blynk Config
 #define BLYNK_TEMPLATE_ID "TMPL62d80911l"
 #define BLYNK_TEMPLATE_NAME "Finpro"
 #define BLYNK_AUTH_TOKEN "gU2c7jLT3jR49avcPaK64yCGOw8_taNK"
 #define BLYNK_PRINT Serial
 
-// MQTT configuration
+// MQTT Config
 #define mqtt_server "broker.hivemq.com"
 #define mqtt_port 1883
 #define mqtt_topic "env-monitor/output"
 
-// Include necessary libraries
 #include <EEPROM.h>
 #include <WiFi.h>
 #include <WiFiClient.h>
@@ -22,13 +21,11 @@
 #include <DHT.h>  
 #include <ESP32Servo.h>
 
-// DHT sensor setup
 #define DHT_PIN 15          
 #define DHT_TYPE DHT11      
 
 DHT dht(DHT_PIN, DHT_TYPE);
 
-// Sensor Pin
 #define ledPin 5
 #define MQ135_PIN 34
 #define pinServo  4
@@ -48,9 +45,9 @@ const int   daylightOffset_sec = 0;
 const char* ntpServer = "asia.pool.ntp.org";
 
 // Environmental variables
-float gasLevel = 0.0; // Example initial gasLevel
-float temperature = 0.0; // Initial temperature in °C
-float humidity = 0.0; // Initial humidity in %
+float gasLevel = 0.0; 
+float temperature = 0.0; 
+float humidity = 0.0; 
 
 // EEPROM addresses
 const int addrGas = 0;
@@ -60,7 +57,7 @@ const int addrHumidity = 8;
 // Blynk timer
 BlynkTimer timer;
 
-
+// Servo
 Servo myservo;
 
 // WiFi and MQTT clients
@@ -107,13 +104,13 @@ void setup()
   // Set up Blynk timer interval
   timer.setInterval(5000L, sendEnvDataToBlynk);
 
-  // Delay for stability
+  // Delay 
   delay(1000);
 
   // Set up LED pin
   pinMode(ledPin, OUTPUT);
 
-   // Initialize MQ135 sensor pin
+  // Initialize MQ135 sensor pin
   pinMode(MQ135_PIN, INPUT);
 
   // Initialize Servo
@@ -128,13 +125,13 @@ void loop()
 
   // Create and run MQTT task on a separate core
   xTaskCreatePinnedToCore(
-    mqttTask,           // Function to execute
-    "MQTT_Task",        // Task name
-    8192,               // Stack size
-    NULL,               // Parameters to pass to the function
-    1,                  // Priority
-    NULL,               // Task handle
-    1                   // Run on the second core
+    mqttTask,         
+    "MQTT_Task",        
+    8192,              
+    NULL,               
+    1,                
+    NULL,           
+    1                   
   );
 
   // Reconnect to MQTT if necessary
@@ -235,16 +232,16 @@ void sendEnvDataToBlynk()
     lcd.print(" %");
 
     
-    // Write and Alert with LED BUILTIN
+    // Not Good Condition
 
     if (gasLevel > 50) {
       Blynk.logEvent("gas_alert", "Gas Leakage Detected");
-      digitalWrite(ledPin, HIGH);  // Turn on LED if temperature > 40°C
+      digitalWrite(ledPin, HIGH);  /
       printLocalTime();
       Serial.println("\tALERT! AIR QUALITY IS POOR - Servo activated");
     } 
     else {
-      digitalWrite(ledPin, LOW);  // Turn off LED if temperature <= 40°C
+      digitalWrite(ledPin, LOW);  /
       printLocalTime();
       Serial.println("\tAir quality is GOOD - Servo deactivated");
     }
@@ -254,12 +251,12 @@ void sendEnvDataToBlynk()
       myservo.write(90); 
       printLocalTime();
       Serial.println("\tALERT! Temperature is too HIGH!");
-      delay(500); // Tunda untuk melihat gerakan
+      delay(500); 
       myservo.write(0);
-      delay(500); // Ulangi
+      delay(500);
     } 
     else {
-      myservo.write(0); // Kembali ke posisi awal
+      myservo.write(0); 
       printLocalTime();
       Serial.println("\tTemperature is within normal range.");
     }

@@ -71,6 +71,120 @@ Terakhir, sistem menggunakan protokol MQTT untuk mengirim data real-time ke clou
 
 ## Software implementation details
 
+Pada Software Implementation proyek IoT kami, digunakan satu kode .ino yang include program yang perlu untuk proyeknya. Pada bagian ini, akan dicoba jelaskan bagian yang penting pada program.
+
+```c
+#include <EEPROM.h>
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <BlynkSimpleEsp32.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <PubSubClient.h>
+#include "freertos/semphr.h"
+#include "time.h"
+#include <DHT.h>  
+#include <ESP32Servo.h>
+```
+Ini merupakan library yang digunakan pada program. DHT.h itu untuk membaca sensor DHT11 (suhu dan kelembapan), LiquidCrystal untuk mengontrol layar LCD, dan Blynk serta WiFi digunakan untuk integrasi platform Blynk. ESP32Servo untuk mengontrol servo motor. 
+
+```c
+void sendEnvDataToBlynk()
+{
+  if(xSemaphoreTake(xMutex, portMAX_DELAY)) {
+    printLocalTime();
+    Serial.println("\tMutex taken");
+
+    // Read data from DHT22 sensor
+    temperature = dht.readTemperature();
+    humidity = dht.readHumidity();
+
+    gasLevel = analogRead(MQ135_PIN);
+    gasLevel = map(gasLevel, 0, 4095, 0, 500); 
+
+    // Check if the sensor readings are valid
+    if (isnan(temperature) || isnan(humidity)) {
+      Serial.println("Failed to read from DHT sensor!");
+      return;
+    }
+
+    // Clamp AQI and temperature to valid ranges
+    gasLevel = max(0.0f, min(gasLevel, 100.0f));  // Same for temperature
+    temperature = max(-10.0f, min(temperature, 50.0f));  // Same for temperature
+    humidity = max(0.0f, min(humidity, 100.0f));  // Clamp humidity
+
+    printLocalTime();
+    Serial.printf("\tGas: %.2f\tTemperature: %.2f°C\tHumidity: %.2f%%\n", gasLevel, temperature, humidity);
+
+    saveEnvDataToEEPROM();
+
+    // Write to Blynk
+    Blynk.virtualWrite(V0, gasLevel);
+    Blynk.virtualWrite(V1, temperature);
+    Blynk.virtualWrite(V2, humidity);
+
+    // Write to LCD Display
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Gas: ");
+    lcd.print(gasLevel, 2);
+    lcd.print(" ppm");
+
+    lcd.setCursor(0, 1);
+    lcd.print("Temp: ");
+    lcd.print(temperature, 2);
+    lcd.print(" C");
+
+    lcd.setCursor(0, 2);
+    lcd.print("Humidity: ");
+    lcd.print(humidity, 2);
+    lcd.print(" %");
+
+    
+    // Not Good Condition
+
+    if (gasLevel > 50) {
+      Blynk.logEvent("gas_alert", "Gas Leakage Detected");
+      digitalWrite(ledPin, HIGH);  /
+      printLocalTime();
+      Serial.println("\tALERT! AIR QUALITY IS POOR - Servo activated");
+    } 
+    else {
+      digitalWrite(ledPin, LOW);  /
+      printLocalTime();
+      Serial.println("\tAir quality is GOOD - Servo deactivated");
+    }
+
+    if (temperature > 40) {
+      Blynk.logEvent("temperature_alert", "Overheat Detected");
+      myservo.write(90); 
+      printLocalTime();
+      Serial.println("\tALERT! Temperature is too HIGH!");
+      delay(500); 
+      myservo.write(0);
+      delay(500);
+    } 
+    else {
+      myservo.write(0); 
+      printLocalTime();
+      Serial.println("\tTemperature is within normal range.");
+    }
+
+    
+
+    xSemaphoreGive(xMutex);
+    printLocalTime();
+    Serial.println("\tMutex given");
+    Serial.println("---------------------------------");
+  }
+}
+```
+Fungsi diatas untuk membaca data dari sensor dan mengirimnya ke Blynk serta menampilkan di LCD. Ini juga mengaktifkan LED atau servo berdasarkan kondisinya. Informasi juga ditampilkan di LCD, serta disimpan di EEPROM untuk keperluan persistensi. Fungsi ini juga mengatur kondisi peringatan, seperti menyalakan LED jika kualitas udara buruk atau menggerakkan servo jika suhu terlalu tinggi.
+
+Pada loop itu menjalankan Blynk, MQTT, dan timer secara terus-menerus. MQTT digunakan untuk mengirim pesan ke broker atau menerima perintah dari aplikasi lain. Jika koneksi MQTT terputus, perangkat akan mencoba untuk terhubung kembali. Hal ini menjadikan sistem mampu memantau kondisi lingkungan, memberikan notifikasi real-time, dan bereaksi terhadap kondisi tertentu secara otomatis.
+
+
+
 ## Test results and performance evaluation
 
 Pada tahap pengujian proyek IoT kami, dilakukan beberapa uji untuk memastikan bahwa program dan sirkuit beroperasi sesuai dengan kriteria dan harapan yang telah ditentukan. Pada aplikasi Blynk 2.0, ESP32 mencoba untuk terhubung ke jaringan WiFi menggunakan SSID dan password yang diberikan. Kemudian, layar LCD dan servo menyala dan menampilkan nilai Suhu, Kelembapan, Gas, dan IAQ (Indoor Air Quality).
